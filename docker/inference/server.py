@@ -1,23 +1,40 @@
 from flask import Flask, request, jsonify
 import numpy as np
 import joblib
+import os
 
 app = Flask(__name__)
 
-# TODO: Load the trained model from the shared volume (use the correct path)
-model = ...
+# Load the trained model from the shared volume
+MODEL_PATH = "/app/models/iris_model.pkl"
+if not os.path.exists(MODEL_PATH):
+    raise FileNotFoundError(
+        f"Model file not found at {MODEL_PATH}. Did the training container run and save it?"
+    )
+model = joblib.load(MODEL_PATH)
 
-# TODO: Add request method to predict
-@app.route('/predict', methods=[''])
+# Prediction endpoint
+@app.route('/predict', methods=['POST'])
 def predict():
-    # TODO: Get the input array from the request body and make prediction using the model
-    get_json = request.get_json()
-    iris_input = ...
+    payload = request.get_json(silent=True)
+    if not payload or 'input' not in payload:
+        return jsonify({"error": "Request JSON must include 'input' array"}), 400
 
-    # HINT: use np.array().reshape(1, -1) to convert input to 2D array
-    prediction = ...
+    iris_input = payload['input']
+    if not isinstance(iris_input, (list, tuple)):
+        return jsonify({"error": "'input' must be a list of numbers"}), 400
 
-    return ...
+    try:
+        arr = np.array(iris_input, dtype=float).reshape(1, -1)
+    except Exception:
+        return jsonify({"error": "'input' must be convertible to numeric array"}), 400
+
+    try:
+        prediction = model.predict(arr)
+    except Exception as e:
+        return jsonify({"error": f"Prediction failed: {str(e)}"}), 500
+
+    return jsonify({"prediction": prediction[0]})
 
 @app.route('/')
 def hello():
